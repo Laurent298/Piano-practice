@@ -170,6 +170,7 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;paddi
     <a href="#rhythm" data-v="rhythm">Rhythm</a>
     <a href="#read" data-v="read">Reading</a>
     <a href="#ear" data-v="ear">Ear</a>
+    <a href="#chords" data-v="chords">Chords &amp; styles</a>
     <a href="#guide" data-v="guide">Guide</a>
     <a href="#settings" data-v="settings">Settings</a>
   </nav>
@@ -301,6 +302,35 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;paddi
     </div>
   </div>
   <div id="earBody"></div>
+</section>
+
+<!-- CHORDS -->
+<section class="view" id="v-chords">
+  <h1>Chords &amp; styles</h1>
+  <p class="lead">Most pop, film and hip-hop piano is a loop of 2–4 chords played in a particular pattern. Learn the patterns here, then type the chords of any song you love — from a chord site or songbook — and practise it in the style you want.</p>
+  <div class="card">
+    <div class="small muted" style="margin-bottom:6px">Studies (original, in each style)</div>
+    <div class="row" id="chPresets"></div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <label class="f"><span>Chords — one per bar; add <b>:2</b> for two beats. English or French names work (Am, F, C/E, Gsus4, Cm7 · Lam, Fa, Do, Sol7).</span>
+      <input id="chIn" type="text" style="border:1px solid var(--line);background:var(--card);border-radius:9px;padding:9px 10px;font-size:16px" value="Am F C G"></label>
+    <div class="row" style="margin-top:10px">
+      <label class="f">Style<select id="chStyle"></select></label>
+      <label class="f">Tempo<input type="number" id="chBpm" value="72" min="40" max="160" style="width:80px"></label>
+      <label class="f">Repeat<select id="chRep"><option>1</option><option selected>2</option><option>4</option></select></label>
+      <label class="f">Transpose<span class="row" style="gap:4px"><button class="btn sm" id="chDn">−1</button><b id="chTr" style="min-width:26px;text-align:center">0</b><button class="btn sm" id="chUp">+1</button></span></label>
+      <span class="sp"></span><button class="btn acc" id="chGo">Build exercise</button>
+    </div>
+    <p class="small" id="chStyleTip" style="margin:10px 0 0"></p>
+    <div class="small" id="chErr" style="color:var(--bad)"></div>
+  </div>
+  <div id="chPlayer" style="margin-top:12px"></div>
+  <div class="card" style="margin-top:12px"><h3>How to use this for your songs</h3><ul class="small" style="margin:6px 0 0;padding-left:20px">
+    <li>Look up the chords of the song (any chord site or songbook), type them in order, pick a style and the song's tempo.</li>
+    <li>Start with <b>Block chords</b> to learn the changes, then switch to the style that matches the song.</li>
+    <li>Hard key (lots of black notes)? Transpose to an easier one while learning the pattern, then move back.</li>
+    <li>Once the left hand runs on its own, hum or sing the melody over it — or pick the melody out with your right hand by ear.</li></ul></div>
 </section>
 
 <!-- GUIDE -->
@@ -592,7 +622,7 @@ class Player{
     this.mode=rec.mode||'wait';
     this.hands=o.fixedHands?'B':(rec.hands&&((rec.hands==='L'&&this.hasL)||(rec.hands==='R'&&this.hasR)||(rec.hands==='B'&&this.hasL&&this.hasR))?rec.hands:(this.hasR?'R':'L'));
     const lv=+S.settings.level;
-    this.bpm=rec.bpm||Math.round(o.bpm*(lv===1?0.6:lv===2?0.75:0.9));
+    this.bpm=o.exactBpm?o.bpm:(rec.bpm||Math.round(o.bpm*(lv===1?0.6:lv===2?0.75:0.9)));
     this.lbl=this.hasF?'f':'n';this.metro=o.kind==='tech';this.loop=false;
     this.nBars=Math.ceil(this.len/this.bpb-1e-6);this.lf=1;this.lt=this.nBars;
     this.build();PLAYERS.add(this);this.reset();
@@ -951,9 +981,10 @@ function buildPlan(){
     {id:'rhythm',t:'Rhythm: read & tap',d:`Level ${S.rhythm.level} — 3 patterns at 85%+.`,min:m(.15),go:()=>{location.hash='rhythm'}},
     ear?{id:'ear',t:'Ear: play it back',d:'Hear a short melody and find it on the keys — 10 melodies.',min:m(.15),go:()=>{location.hash='ear'}}
        :{id:'read',t:'Note reading',d:'One round of 20 notes.',min:m(.15),go:()=>{location.hash='read'}},
-    {id:'song',t:'Learn: '+cur.title,d:'Wait mode → hands separately → Play & score. Loop the hard bars.',min:m(rev?.4:.5),go:()=>{SONGV.sel=cur.id;location.hash='songs'}},
+    {id:'song',t:'Learn: '+cur.title,d:'Wait mode → hands separately → Play & score. Loop the hard bars.',min:m((rev?.4:.5)-(T>=30?.12:0)),go:()=>{SONGV.sel=cur.id;location.hash='songs'}},
   ];
   S.plan.songId=cur.id;S.plan.reviewId=rev?rev.id:null;
+  if(T>=30)b.push({id:'chords',t:'Style: chord loop',d:'Pick a study in Chords & styles — or type the chords of a song you love.',min:m(.12),go:()=>{location.hash='chords'}});
   if(rev)b.push({id:'review',t:'Review: '+rev.title,d:'Play it through once for fun and fluency.',min:m(.1),go:()=>{SONGV.sel=rev.id;location.hash='songs'}});
   return b;
 }
@@ -1329,6 +1360,78 @@ function earChord(b){quiz(b,{key:'chord',levels:['Major / minor','+ diminished, 
   play:q=>{ac();const t=AU.ctx.currentTime+0.05;q.c[2].forEach((iv,i)=>playNote(q.r+iv,q.dir==='arp'?t+i*0.35:t,q.dir==='arp'?1.6-i*0.35:1.6))},
   label:q=>q.c[1]+' chord'})}
 
+/* ============ chords & styles ============ */
+const QUAL={'':[0,4,7],'m':[0,3,7],'min':[0,3,7],'-':[0,3,7],'5':[0,7],'7':[0,4,7,10],'maj7':[0,4,7,11],'M7':[0,4,7,11],'7M':[0,4,7,11],'m7':[0,3,7,10],'dim':[0,3,6],'°':[0,3,6],'aug':[0,4,8],'+':[0,4,8],
+  'sus2':[0,2,7],'sus4':[0,5,7],'sus':[0,5,7],'add9':[0,4,7,14],'madd9':[0,3,7,14],'6':[0,4,7,9],'m6':[0,3,7,9],'9':[0,4,7,10,14],'m9':[0,3,7,10,14],'maj9':[0,4,7,11,14],'m7b5':[0,3,6,10],'dim7':[0,3,6,9],'7sus4':[0,5,7,10],'mmaj7':[0,3,7,11]};
+const SOLF={do:'C',re:'D','ré':'D',mi:'E',fa:'F',sol:'G',la:'A',si:'B'};
+function frToEn(s){return s.replace(/^(sol|do|ré|re|mi|fa|la|si)/i,m=>SOLF[m.toLowerCase()]).replace(/\/(sol|do|ré|re|mi|fa|la|si)/i,(m,x)=>'/'+SOLF[x.toLowerCase()])}
+function parseChord(tok,tr){const[main0,dur]=tok.split(':');const main=frToEn(main0.replace('♯','#').replace('♭','b'));
+  const m=/^([A-G])([#b]?)([^/]*)(?:\/([A-G])([#b]?))?$/.exec(main);if(!m)throw new Error('Can’t read “'+main0+'”');
+  const q=QUAL[m[3]];if(!q)throw new Error('Unknown chord type in “'+main0+'”');
+  const acc=a=>a==='#'?1:a==='b'?-1:0;const pc=((LET[m[1]]+acc(m[2])+tr)%12+12)%12;const bass=m[4]?((LET[m[4]]+acc(m[5])+tr)%12+12)%12:pc;
+  const flat=m[2]==='b'||(tr<0);const nm=n=>(flat?FL:SH)[n];
+  return{label:nm(pc)+m[3]+(m[4]?'/'+nm(bass):''),pc,ivs:q,bass,third:q.includes(3)?3:q.includes(4)?4:q[1],beats:dur?+dur:4,flat}}
+function voice(ch,prev){const tones=(ch.ivs.length>4?ch.ivs.filter(i=>i!==7):ch.ivs).map(i=>(ch.pc+i)%12);let best=null,bs=1e9;
+  for(let k=0;k<tones.length;k++){const rot=[...tones.slice(k),...tones.slice(0,k)];let lo=rot[0];while(lo<55)lo+=12;while(lo>66)lo-=12;
+    const ns=[lo];for(let i=1;i<rot.length;i++){let n=rot[i];while(n<=ns[i-1])n+=12;ns.push(n)}
+    const sc=prev?ns.reduce((s,n,i)=>s+Math.abs(n-(prev[Math.min(i,prev.length-1)])),0):Math.abs((ns[0]+ns[ns.length-1])/2-64);
+    if(sc<bs){bs=sc;best=ns}}return best}
+const lowRoot=(pc,lo=40)=>{let r=pc;while(r<lo)r+=12;return r};
+const STYLES=[
+ {id:'block',n:'Block chords',tip:'Learn the changes: whole chord in the right hand, bass note in the left. Aim to move between chords without a gap.'},
+ {id:'ballad',n:'Pop ballad',tip:'Left hand root + octave on beats 1 and 3, right hand chords on every beat. The sound of countless piano ballads — keep it soft and even.'},
+ {id:'arp',n:'Neoclassical arpeggio',tip:'Flowing left-hand eighths (root–5th–octave–10th) under a single long right-hand note — the minimalist film/neoclassical sound. Pedal once per chord.'},
+ {id:'pulse',n:'Cinematic pulse',tip:'Low octaves held in the left hand, right hand pulsing repeated eighth-note chords. Start soft and build volume over each repeat — the epic film-score feel.'},
+ {id:'hiphop',n:'Hip-hop loop',tip:'Laid-back, syncopated: bass on 1 and the “and” of 2, chord stabs off the beat. Play the stabs short and keep the groove behind the beat. Works best with minor and 7th chords.'},
+ {id:'broken',n:'Broken chords (right hand)',tip:'Right hand rolls the chord up and down in eighths while the left holds the bass — the classic accompaniment for French chanson and folk.'},
+];
+function chordEvents(chs,style,rep){const ev=[];let t=0,prev=null;const N=(t,d,ms,h,f,flat)=>ev.push({t,d,midis:ms,names:ms.map(m=>midiName(m,flat)),fingers:f,hand:h});
+  for(let r=0;r<rep;r++)chs.forEach(ch=>{const rh=voice(ch,prev);prev=rh;const B=ch.beats,root=lowRoot(ch.bass);const rf=rh.length>=4?['1','2','3','5']:['1','3','5'];const fl=ch.flat;
+    const sub=(arr)=>arr.filter(([s])=>s<B-1e-6).map(([s,d,...x])=>[s,Math.min(d,B-s),...x]);
+    if(style==='block'){N(t,B,rh,'R',rf,fl);N(t,B,[root],'L',['5'],fl)}
+    else if(style==='ballad'){for(let b=0;b<B;b++)N(t+b,1,rh,'R',rf,fl);sub([[0,2],[2,2]]).forEach(([s,d],i)=>N(t+s,d,i?[root]:[root,root+12],'L',i?['5']:['5','1'],fl))}
+    else if(style==='arp'){const th=root+12+ch.third;const seq=[0,7,12,th-root,12,7,12,7];sub(seq.map((iv,i)=>[i*.5,.5,iv])).forEach(([s,d,iv])=>N(t+s,d,[root+iv],'L',[{0:'5',7:'2',12:'1'}[iv]||'2'],fl));
+      N(t,B,[rh[rh.length-1]],'R',['5'],fl)}
+    else if(style==='pulse'){let r2=lowRoot(ch.bass,36);N(t,B,[r2,r2+12],'L',['5','1'],fl);for(let s=0;s<B;s+=.5)N(t+s,.5,rh,'R',rf,fl)}
+    else if(style==='hiphop'){sub([[0,1.5],[1.5,.5],[2,2]]).forEach(([s,d],i)=>N(t+s,d,[i===2?root+12:root],'L',[i===2?'1':'5'],fl));
+      sub([[0,.75],[1.5,.5],[2.5,.5],[3.5,.5]]).forEach(([s,d])=>N(t+s,d,rh,'R',rf,fl))}
+    else if(style==='broken'){N(t,B,[root],'L',['5'],fl);const up=[...rh,rh[0]+12];const seq=[...up,...up.slice(1,-1).reverse()].slice(0,8);
+      const fs=up.length===4?['1','2','3','5']:['1','2','3','4','5'];const fseq=[...fs.slice(0,up.length),...fs.slice(1,up.length-1).reverse()];
+      sub(seq.map((m,i)=>[i*.5,.5,m,fseq[i]])).forEach(([s,d,m,f])=>N(t+s,d,[m],'R',[f],fl))}
+    t+=B});
+  return{events:ev,len:t}}
+const CH_PRESETS=[
+ {n:'Ballad in C',c:'C G Am F',s:'ballad',bpm:72},
+ {n:'Neoclassical in A minor',c:'Am F C G',s:'arp',bpm:66},
+ {n:'Melancholy in E minor',c:'Em C G D',s:'arp',bpm:70},
+ {n:'Cinematic in D minor',c:'Dm Bb F C',s:'pulse',bpm:90},
+ {n:'Epic build in C minor',c:'Cm Ab Eb Bb',s:'pulse',bpm:100},
+ {n:'Hip-hop in C minor',c:'Cm7 Abmaj7 Fm7 G7',s:'hiphop',bpm:84},
+ {n:'Dark trap loop in A minor',c:'Am Fmaj7 Dm7 E7',s:'hiphop',bpm:76},
+ {n:'Chanson in A minor',c:'Am Dm G C F Dm E7 Am',s:'broken',bpm:96},
+];
+const CH={tr:0,player:null};
+VIEWS.chords=()=>{
+  if(!$('#chStyle').options.length){$('#chStyle').innerHTML=STYLES.map(s=>`<option value="${s.id}">${s.n}</option>`).join('');
+    $('#chPresets').innerHTML=CH_PRESETS.map((p,i)=>`<button class="chip" data-i="${i}">${p.n}</button>`).join('');
+    $$('#chPresets .chip').forEach(c=>c.onclick=()=>{const p=CH_PRESETS[c.dataset.i];$('#chIn').value=p.c;$('#chStyle').value=p.s;$('#chBpm').value=p.bpm;CH.tr=0;$('#chTr').textContent='0';
+      $$('#chPresets .chip').forEach(x=>x.classList.toggle('on',x===c));chBuild()});
+    $('#chStyle').onchange=()=>{chTip();if(CH.player)chBuild()};$('#chGo').onclick=chBuild;$('#chIn').onkeydown=e=>{if(e.key==='Enter')chBuild()};
+    $('#chUp').onclick=()=>{CH.tr=Math.min(11,CH.tr+1);$('#chTr').textContent=(CH.tr>0?'+':'')+CH.tr;chBuild()};$('#chDn').onclick=()=>{CH.tr=Math.max(-11,CH.tr-1);$('#chTr').textContent=(CH.tr>0?'+':'')+CH.tr;chBuild()};
+    if(S.chords){$('#chIn').value=S.chords.c;$('#chStyle').value=S.chords.s;$('#chBpm').value=S.chords.bpm}}
+  chTip();if(!CH.player)chBuild();
+};
+function chTip(){$('#chStyleTip').innerHTML='💡 '+esc(STYLES.find(s=>s.id===$('#chStyle').value).tip)}
+function chBuild(){$('#chErr').textContent='';let chs;
+  try{chs=$('#chIn').value.trim().split(/[\s,|]+/).filter(Boolean).map(t=>parseChord(t,CH.tr));if(!chs.length)throw new Error('Type some chords first')}catch(e){$('#chErr').textContent=e.message;return}
+  const st=$('#chStyle').value,rep=+$('#chRep').value,bpm=clamp(+$('#chBpm').value||72,40,160);
+  S.chords={c:$('#chIn').value.trim(),s:st,bpm};save();
+  const g=chordEvents(chs,st,rep);const id='chords:'+st+':'+chs.map(c=>c.label).join('-');
+  if(CH.player)CH.player.destroy();
+  chTip();CH.player=new Player($('#chPlayer'),{events:g.events,len:g.len,bpm,bpb:4,id,kind:'tech',exactBpm:true,onDone:()=>planDone('chords')});
+  CH.player.host.querySelector('.st').textContent='Chords: '+chs.map(c=>c.label).join(' → ');
+}
+
 /* ============ guide ============ */
 VIEWS.guide=()=>{if($('#v-guide').innerHTML)return;$('#v-guide').innerHTML=`<h1>Guide</h1><p class="lead">The fundamentals that make everything else easier — worth rereading every few weeks.</p>
 <div class="grid g2">
@@ -1361,7 +1464,7 @@ VIEWS.guide=()=>{if($('#v-guide').innerHTML)return;$('#v-guide').innerHTML=`<h1>
 <li><b>Weeks 1–4:</b> five-finger patterns, Level 1 songs, rhythm levels 1–2, reading level 1.</li>
 <li><b>Months 2–3:</b> major scales (1 octave, hands separately), triads, Level 2 songs hands together, rhythm 3–4.</li>
 <li><b>Months 4–6:</b> scales hands together, cadences, accompaniment patterns, Minuet in G, Für Elise opening.</li>
-<li><b>Beyond:</b> play from lead sheets (melody + chord symbols) using the accompaniment patterns — the key to playing pop songs you love.</li></ul></div>
+<li><b>Beyond:</b> play from lead sheets (melody + chord symbols) using the patterns in <i>Chords &amp; styles</i> — the key to playing the pop, film and hip-hop songs you love.</li></ul></div>
 <div class="card"><h3>Computer keyboard</h3><p class="small" style="margin:0">No piano nearby? Use <kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>T</kbd> <kbd>G</kbd> <kbd>Y</kbd> <kbd>H</kbd> <kbd>U</kbd> <kbd>J</kbd> <kbd>K</kbd> as the keys from C to C (<kbd>W E T Y U</kbd> are the black keys). <kbd>Z</kbd>/<kbd>X</kbd> change octave. Good for reading and ear drills on the go.</p></div>
 </div>`};
 
