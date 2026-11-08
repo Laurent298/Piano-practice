@@ -179,6 +179,7 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;paddi
     <a href="#settings" data-v="settings">Settings</a>
   </nav>
   <div class="inputs">
+    <span class="pill" id="pillHeard" style="display:none;border-color:var(--accent);color:var(--accent);font-weight:600"></span>
     <span class="pill" id="pillMidi" title="MIDI keyboard"><span class="dot"></span><span class="txt">MIDI</span></span>
     <span class="pill" id="pillMic" title="Microphone pitch detection" style="cursor:pointer"><span class="dot"></span><span class="txt">Mic</span></span>
   </div>
@@ -352,6 +353,7 @@ kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;paddi
         <label class="row small"><input type="checkbox" id="setMidiSound"> Play app sound for MIDI notes (off if your piano makes its own sound)</label>
         <label class="row small"><input type="checkbox" id="setMicLenient" checked> Mic: accept the right note in any octave</label>
         <label class="f">Mic sensitivity<input type="range" id="setMicSens" min="1" max="10" value="5"></label>
+        <div class="small">Mic level <div class="meter" style="margin:4px 0"><i id="micLvl" style="width:0"></i></div><span class="muted">Play a note: the bar should jump past the middle and the note should appear at the top right.</span></div>
         <p class="small muted" style="margin:0">Computer keyboard: <kbd>A</kbd><kbd>W</kbd><kbd>S</kbd><kbd>E</kbd><kbd>D</kbd><kbd>F</kbd><kbd>T</kbd><kbd>G</kbd><kbd>Y</kbd><kbd>H</kbd><kbd>U</kbd><kbd>J</kbd><kbd>K</kbd> = C to C. <kbd>Z</kbd>/<kbd>X</kbd> shift octave.</p>
       </div>
     </div>
@@ -509,6 +511,7 @@ function noteInput(type,m,vel,src){
   const lat=src==='mic'?0.07:src==='midi'?0.005:0.02;
   BUS.emit({type,midi:m,vel,src,at:ctx.currentTime-lat});
   KBS.forEach(k=>k.press(m,type==='on'));
+  if(type==='on'&&src!=='screen'){const p=$('#pillHeard');p.style.display='';p.textContent='♪ '+mName(m)+(Math.floor(m/12)-1)+' · '+({midi:'MIDI',mic:'mic',keys:'keys'}[src]||src);clearTimeout(noteInput._t);noteInput._t=setTimeout(()=>p.style.display='none',2500)}
 }
 function tapInput(src){lastActivity=Date.now();const ctx=ac();BUS.emit({type:'tap',src,at:ctx.currentTime-(src==='mic'?0.03:0.01)})}
 
@@ -553,7 +556,7 @@ function micStop(){if(MIC.stream)MIC.stream.getTracks().forEach(t=>t.stop());cle
 function micUI(){$('#pillMic').classList.toggle('on',MIC.on);const b=$('#micBtn');if(b)b.textContent=MIC.on?'Turn off microphone':'Turn on microphone'}
 function micTick(){
   const b=MIC.buf;MIC.an.getFloatTimeDomainData(b);const n=b.length;let rms=0;for(let i=0;i<n;i++)rms+=b[i]*b[i];rms=Math.sqrt(rms/n);
-  const thr=0.045*Math.pow(0.72,S.settings.micSens);const now=performance.now();
+  const thr=0.045*Math.pow(0.72,S.settings.micSens);MIC.rms=rms;MIC.thr=thr;const now=performance.now();
   if(rms>thr*1.4&&rms>MIC.prev*1.5&&now-MIC.lastOn>110){MIC.lastOn=now;MIC.pend=true;tapInput('mic')}
   MIC.prev=MIC.prev*0.5+rms*0.5;
   if(rms<thr){if(++MIC.quiet>3&&MIC.held>=0){noteInput('off',MIC.held,0,'mic');MIC.held=-1}MIC.cand=-1;return}
@@ -630,6 +633,8 @@ class Player{
     this.lbl=this.hasF?'f':'n';this.metro=o.kind==='tech';this.loop=false;
     this.nBars=Math.ceil(this.len/this.bpb-1e-6);this.lf=1;this.lt=this.nBars;
     this.build();PLAYERS.add(this);this.reset();
+    // first correct key in Wait mode starts the exercise automatically
+    this.idle=BUS.on(e=>{if(this.running||e.type!=='on'||this.mode!=='wait'||!this.host.offsetParent)return;const s=this.steps[0];if(s&&s.ns.some(n=>this.match(n.m,e))){this.start();this.onInput(e)}});
   }
   store(){return this.o.kind==='tech'?S.tech:S.songs}
   rec(){return this.store()[this.o.id]||{}}
@@ -697,13 +702,15 @@ class Player{
       if(this.mode==='play')for(let i=0;i<this.bpb;i++)click(this.t0-(this.bpb-i)*this.spb,i===0);
       this.timer=setInterval(()=>this.schedule(),25);this.schedule()}
     this.unsub=BUS.on(e=>this.onInput(e));this.t1=performance.now();
+    if(!MIDI.names.length&&!MIC.on){this.resEl.innerHTML=`<div class="notice w" style="margin-top:10px">The app can't hear your piano yet. <b>Digital piano:</b> connect the USB cable and press <i>Connect MIDI</i>. <b>No cable:</b> turn on the microphone. <span class="row" style="margin-top:6px"><button class="btn sm nmidi">Connect MIDI</button><button class="btn sm acc nmic">Turn on microphone</button></span></div>`;
+      this.resEl.querySelector('.nmidi').onclick=()=>initMIDI(true);this.resEl.querySelector('.nmic').onclick=()=>{micStart();this.resEl.innerHTML=''}}
     const loop=()=>{if(!this.running)return;this.frame();this.raf=requestAnimationFrame(loop)};this.raf=requestAnimationFrame(loop);
   }
   stop(){
     this.running=false;clearInterval(this.timer);if(this.unsub)this.unsub();this.unsub=null;cancelAnimationFrame(this.raf);
     if(this.btn)this.btn.textContent='▶ Start';if(this.kb){this.kb.clear();this.sig=''}if(this.big)this.big.textContent='';
   }
-  destroy(){this.stop();KBS.delete(this.kb);PLAYERS.delete(this);this.ro&&this.ro.disconnect()}
+  destroy(){if(this.idle)this.idle();this.stop();KBS.delete(this.kb);PLAYERS.delete(this);this.ro&&this.ro.disconnect()}
   at(t){return this.t0+(t-this.from())*this.spb}
   schedule(){
     const ctx=AU.ctx,h=ctx.currentTime+0.15,to=this.to();
@@ -1485,6 +1492,7 @@ $('#expBtn').onclick=()=>{const a=document.createElement('a');a.href=URL.createO
 $('#impFile').onchange=async e=>{try{S=merge(structuredClone(DEF),JSON.parse(await e.target.files[0].text()));save();toast('Progress imported');go('today')}catch(err){toast('Could not read that file')}};
 $('#resetBtn').onclick=()=>{if(confirm('Delete all progress on this device?')){localStorage.removeItem(LS_KEY);S=load();save();location.reload()}};
 
+setInterval(()=>{if(curView==='settings'&&MIC.on){const l=$('#micLvl');l.style.width=clamp(50*MIC.rms/MIC.thr,0,100)+'%';l.style.background=MIC.rms>MIC.thr?'var(--ok)':'var(--muted)'}},100);
 /* ============ onboarding & init ============ */
 function onboard(){const m=$('#onboard');m.classList.add('on');const pick={level:'1',input:'none',goal:'30'};
   [['#obLevel','level'],['#obInput','input'],['#obGoal','goal']].forEach(([sel,k])=>{$$(sel+' .chip').forEach(c=>{c.classList.toggle('on',c.dataset.v===pick[k]);c.onclick=()=>{pick[k]=c.dataset.v;$$(sel+' .chip').forEach(x=>x.classList.toggle('on',x===c))}})});
